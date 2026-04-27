@@ -4,47 +4,23 @@ provider "aws" {
   secret_key = var.aws_secret_key
 }
 
+resource "random_pet" "bucket_suffix" {
+  length = 2
+}
+
+resource "aws_s3_bucket" "example" {
+  bucket = "bucket-${random_pet.bucket_suffix.id}"
+
+  tags = {
+    Name = "bucket-${random_pet.bucket_suffix.id}"
+  }
+}
+
 resource "aws_instance" "web_server" {
-  ami           = "ami-0279a86684f669718"
+  ami           = "ami-098e39bafa7e7303d"
   instance_type = "t2.micro"
 
   tags = {
-    Name = "first server"
-  }
-}
-
-resource "aws_vpc" "main" {
-  cidr_block       = "10.0.0.0/16"
-  instance_tenancy = "default"
-
-  tags = {
-    Name = "production"
-  }
-}
-
-resource "aws_vpc" "dev" {
-  cidr_block       = "10.1.0.0/16"
-  instance_tenancy = "default"
-
-  tags = {
-    Name = "dev"
-  }
-}
-
-resource "aws_subnet" "main" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.1.0/24"
-
-  tags = {
-    Name = "prod-subnet"
-  }
-}
-
-resource "aws_subnet" "dev" {
-  vpc_id     = aws_vpc.dev.id
-  cidr_block = "10.1.1.0/24"
-
-  tags = {
-    Name = "dev-subnet"
+    Name = "server-${random_pet.bucket_suffix.id}"
   }
 }
