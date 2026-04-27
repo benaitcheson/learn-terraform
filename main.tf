@@ -8,6 +8,11 @@ resource "random_pet" "bucket_suffix" {
   length = 2
 }
 
+resource "random_password" "db_password" {
+  length  = 32
+  special = true
+}
+
 resource "aws_s3_bucket" "example" {
   bucket = "bucket-${random_pet.bucket_suffix.id}"
 
@@ -23,4 +28,18 @@ resource "aws_instance" "web_server" {
   tags = {
     Name = "server-${random_pet.bucket_suffix.id}"
   }
+}
+
+resource "aws_db_instance" "postgres" {
+  identifier          = "primary-instance-${random_pet.bucket_suffix.id}"
+  engine              = "postgres"
+  engine_version      = "17.9"
+  instance_class      = "db.t4g.micro"
+  allocated_storage   = 20
+  storage_type        = "gp3"
+  db_name             = "mydb"
+  username            = "unxkqzmpltbac"
+  password            = random_password.db_password
+  skip_final_snapshot = true
+  publicly_accessible = false
 }
