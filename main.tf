@@ -9,8 +9,9 @@ resource "random_pet" "bucket_suffix" {
 }
 
 resource "random_password" "db_password" {
-  length  = 32
-  special = true
+  length           = 32
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}:?"
 }
 
 resource "aws_s3_bucket" "example" {
@@ -39,7 +40,7 @@ resource "aws_db_instance" "postgres" {
   storage_type        = "gp3"
   db_name             = "mydb"
   username            = "unxkqzmpltbac"
-  password            = random_password.db_password
+  password            = random_password.db_password.result
   skip_final_snapshot = true
   publicly_accessible = false
 }
