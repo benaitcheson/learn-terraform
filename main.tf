@@ -21,6 +21,38 @@ resource "aws_security_group" "web_server" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+}
+
+resource "aws_iam_role" "web_server_role" {
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "web_server_role_policy_attachment" {
+  role       = aws_iam_role.web_server_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "web_server_profile" {
+  role = aws_iam_role.web_server_role.name
 }
 
 resource "aws_s3_bucket" "example" {
@@ -34,7 +66,8 @@ resource "aws_s3_bucket" "example" {
 resource "aws_instance" "web_server" {
   ami           = "ami-098e39bafa7e7303d"
   instance_type = "t2.micro"
-  security_groups = [aws_security_group.web_server.name]
+  iam_instance_profile = aws_iam_instance_profile.web_server_profile.name
+  vpc_security_group_ids = [aws_security_group.web_server.id]
 
   tags = {
     Name = "server-${random_pet.bucket_suffix.id}"
