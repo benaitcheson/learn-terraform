@@ -14,6 +14,15 @@ resource "random_password" "db_password" {
   override_special = "!#$%&*()-_=+[]{}:?"
 }
 
+resource "aws_security_group" "web_server" {
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 resource "aws_s3_bucket" "example" {
   bucket = "bucket-${random_pet.bucket_suffix.id}"
 
@@ -25,6 +34,7 @@ resource "aws_s3_bucket" "example" {
 resource "aws_instance" "web_server" {
   ami           = "ami-098e39bafa7e7303d"
   instance_type = "t2.micro"
+  security_groups = [aws_security_group.web_server.name]
 
   tags = {
     Name = "server-${random_pet.bucket_suffix.id}"
@@ -34,7 +44,7 @@ resource "aws_instance" "web_server" {
 resource "aws_db_instance" "postgres" {
   identifier          = "primary-instance-${random_pet.bucket_suffix.id}"
   engine              = "postgres"
-  engine_version      = "17.9"
+  engine_version      = "18.3"
   instance_class      = "db.t4g.micro"
   allocated_storage   = 20
   storage_type        = "gp3"
