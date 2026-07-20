@@ -11,7 +11,16 @@ resource "random_pet" "bucket_suffix" {
 resource "random_password" "db_password" {
   length           = 32
   special          = true
-  override_special = "!#$%&*()-_=+[]{}:?"
+  override_special = "-_"
+}
+
+resource "aws_security_group" "database" {
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    security_groups = [aws_security_group.web_server.id]
+  }
 }
 
 resource "aws_security_group" "web_server" {
@@ -76,6 +85,7 @@ resource "aws_instance" "web_server" {
 
 resource "aws_db_instance" "postgres" {
   identifier          = "primary-instance-${random_pet.bucket_suffix.id}"
+  vpc_security_group_ids = [aws_security_group.database.id]
   engine              = "postgres"
   engine_version      = "18.3"
   instance_class      = "db.t4g.micro"
