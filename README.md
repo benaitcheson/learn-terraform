@@ -22,20 +22,11 @@ Everything runs in the **default VPC** — no custom networking yet, by design.
 ## Setup
 
 Credentials come from a short-lived (4-hour) sandbox account, so they rotate often.
+No credentials live in any file: the provider block declares no `access_key`/`secret_key`,
+so Terraform falls back to its credential chain — environment variables first — and the
+AWS CLI reads the same ones. One export arms both tools.
 
-1. Copy the example vars file and fill in the sandbox credentials:
-
-   ```sh
-   cp terraform.tfvars.example terraform.tfvars
-   ```
-
-   Set `aws_access_key`, `aws_secret_key`, and `aws_region` (this project has been
-   using `us-east-1`).
-
-   `terraform.tfvars` and `terraform.tfstate` are gitignored — both contain secrets
-   (the state file holds the generated DB password in plaintext).
-
-2. The AWS CLI does **not** read tfvars — export the same credentials for CLI work:
+1. Export the sandbox credentials (once per sandbox, in each shell that needs them):
 
    ```sh
    export AWS_ACCESS_KEY_ID=...
@@ -43,7 +34,9 @@ Credentials come from a short-lived (4-hour) sandbox account, so they rotate oft
    export AWS_DEFAULT_REGION=us-east-1
    ```
 
-3. Initialize and apply:
+   Sanity check: `aws sts get-caller-identity` shows which account you're pointed at.
+
+2. Initialize and apply:
 
    ```sh
    terraform init
@@ -51,8 +44,11 @@ Credentials come from a short-lived (4-hour) sandbox account, so they rotate oft
    terraform apply
    ```
 
-   When the sandbox expires, nothing carries over: update credentials and re-apply
-   from scratch. RDS creation takes 5–10 minutes.
+   When the sandbox expires, nothing carries over: export the new credentials and
+   re-apply from scratch. RDS creation takes 5–10 minutes.
+
+`terraform.tfstate` is gitignored — it contains secrets (the generated DB password
+in plaintext).
 
 ## Shell access (SSM, no SSH)
 
@@ -102,10 +98,11 @@ Success check from a laptop: `curl http://<instance-public-ip>` returns an HTTP 
 ## Files
 
 - `main.tf` — resource definitions
-- `variables.tf` — input variables (AWS credentials + region)
 - `outputs.tf` — outputs (`db_password`, marked sensitive; read with `terraform output -raw db_password`)
 - `versions.tf` — Terraform and provider version constraints
-- `terraform.tfvars.example` — template for your local `terraform.tfvars`
+- `app_container_startup.sh` — WIP `user_data` script for automating the deploy
+- `variables.tf`, `terraform.tfvars`, `terraform.tfvars.example` — empty/stale leftovers
+  from when credentials were passed as variables; safe to delete
 
 ## Known rough edges / next steps
 
@@ -117,6 +114,6 @@ Success check from a laptop: `curl http://<instance-public-ip>` returns an HTTP 
 - [ ] Migrate inline `ingress`/`egress` blocks to standalone
       `aws_vpc_security_group_ingress_rule` resources (current provider best practice —
       but never mix both styles on one group)
-- [ ] Drop `access_key`/`secret_key` from the provider block in favour of environment
-      credentials
+- [x] Drop `access_key`/`secret_key` from the provider block in favour of environment
+      credentials (done — the provider block is gone entirely; region also comes from env)
 - [ ] Wire the S3 bucket into the app (will need a scoped IAM policy on the web server role)
