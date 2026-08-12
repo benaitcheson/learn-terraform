@@ -10,8 +10,8 @@ Everything runs in the **default VPC** — no custom networking yet, by design.
 
 | Resource | Purpose |
 |---|---|
-| `aws_instance.web_server` | t2.micro EC2 instance that runs the app in Docker |
-| `aws_db_instance.postgres` | Postgres 18 on RDS (db.t4g.micro, not publicly accessible) |
+| `aws_instance.web_server` | t4g.small EC2 instance (Graviton/ARM) that runs the app in Docker |
+| `aws_db_instance.postgres` | Postgres 18 on RDS (db.t4g.small, also Graviton, not publicly accessible) |
 | `aws_s3_bucket.example` | S3 bucket (not wired into the app yet) |
 | `aws_security_group.web_server` | Allows HTTP (port 80) in from anywhere; all traffic out |
 | `aws_security_group.database` | Allows Postgres (5432) in **only from the web server's security group** |
@@ -76,7 +76,7 @@ sudo systemctl enable docker
 
 git clone https://github.com/YOURGITHUB/REPO.git
 cd REPO
-sudo docker build -t REPO .   # slow on a t2.micro; be patient
+sudo docker build -t REPO .   # builds a native arm64 image on the Graviton box
 
 sudo docker run -d -p 80:3000 \
   -e SECRET_KEY_BASE=<openssl rand -hex 64> \
@@ -117,3 +117,5 @@ Success check from a laptop: `curl http://<instance-public-ip>` returns an HTTP 
 - [x] Drop `access_key`/`secret_key` from the provider block in favour of environment
       credentials (done — the provider block is gone entirely; region also comes from env)
 - [ ] Wire the S3 bucket into the app (will need a scoped IAM policy on the web server role)
+- [ ] Replace the hardcoded arm64 AMI ID with a `data "aws_ami"` lookup (AMI IDs are
+      per-region and per-architecture, and go stale as new AL2023 releases ship)

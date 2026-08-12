@@ -67,8 +67,8 @@ resource "aws_s3_bucket" "example" {
 }
 
 resource "aws_instance" "web_server" {
-  ami           = "ami-098e39bafa7e7303d"
-  instance_type = "t2.micro"
+  ami           = "ami-02a162a9d90e36c35"
+  instance_type = "t4g.small"
   iam_instance_profile = aws_iam_instance_profile.web_server_profile.name
   vpc_security_group_ids = [aws_security_group.web_server.id]
 
@@ -82,7 +82,7 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids = [aws_security_group.database.id]
   engine              = "postgres"
   engine_version      = "18.3"
-  instance_class      = "db.t4g.micro"
+  instance_class      = "db.t4g.small"
   allocated_storage   = 20
   storage_type        = "gp3"
   db_name             = "mydb"
