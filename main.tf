@@ -8,6 +8,11 @@ resource "random_password" "db_password" {
   override_special = "-_"
 }
 
+resource "random_password" "secret_key_base" {
+  length           = 64
+  special          = false
+}
+
 resource "aws_security_group" "database" {
   ingress {
     from_port   = 5432
@@ -71,6 +76,11 @@ resource "aws_instance" "web_server" {
   instance_type = "t4g.small"
   iam_instance_profile = aws_iam_instance_profile.web_server_profile.name
   vpc_security_group_ids = [aws_security_group.web_server.id]
+  user_data_replace_on_change = true
+  user_data = templatefile("${path.module}/app_container_startup.sh", {
+    secret_key_base = random_password.secret_key_base.result
+    database_url    = "postgres://unxkqzmpltbac:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/mydb"
+  })
 
   tags = {
     Name = "server-${random_pet.bucket_suffix.id}"
@@ -81,7 +91,7 @@ resource "aws_db_instance" "postgres" {
   identifier          = "primary-instance-${random_pet.bucket_suffix.id}"
   vpc_security_group_ids = [aws_security_group.database.id]
   engine              = "postgres"
-  engine_version      = "18.3"
+  engine_version      = "18.4"
   instance_class      = "db.t4g.small"
   allocated_storage   = 20
   storage_type        = "gp3"

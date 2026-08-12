@@ -18,6 +18,7 @@ Everything runs in the **default VPC** — no custom networking yet, by design.
 | `aws_iam_role.web_server_role` + policy attachment + instance profile | Gives the instance the `AmazonSSMManagedInstanceCore` managed policy so SSM Session Manager works (shell access with no SSH keys and no port 22) |
 | `random_pet.bucket_suffix` | Readable unique suffix shared by resource names |
 | `random_password.db_password` | 32-char DB master password (URL-safe specials only — `-` and `_` — so it can be embedded in a `DATABASE_URL` without percent-encoding) |
+| `random_password.secret_key_base` | 64-char Rails `SECRET_KEY_BASE`. Lives in Terraform state (not generated on the box) so session cookies survive instance replacement |
 
 ## Setup
 
@@ -64,50 +65,58 @@ If the instance doesn't register: check the IAM instance profile is attached, th
 security group allows outbound 443, and give the agent a couple of minutes (or reboot
 the instance).
 
-## Deploying the app (currently manual)
+## Deploying the app (automated via user_data)
 
-Deployment is still done by hand over an SSM session — automating this via `user_data`
-is the next step. The rehearsed sequence on the box:
+`terraform apply` is the whole deploy. The instance's `user_data` runs
+`app_container_startup.sh` at first boot: install docker + git, clone the app repo,
+build the image (native arm64 on the Graviton box), `docker run`.
 
-```sh
-sudo dnf install -y docker git
-sudo systemctl start docker
-sudo systemctl enable docker
-
-git clone https://github.com/YOURGITHUB/REPO.git
-cd REPO
-sudo docker build -t REPO .   # builds a native arm64 image on the Graviton box
-
-sudo docker run -d -p 80:3000 \
-  -e SECRET_KEY_BASE=<openssl rand -hex 64> \
-  -e DATABASE_URL='postgres://<username>:<password>@<endpoint>/<db_name>' \
-  REPO
-```
+The script is rendered with `templatefile()` in `main.tf`, which is how the
+Terraform-only values get in: `${secret_key_base}` and `${database_url}` placeholders
+in the script are substituted before the script reaches the instance. Because
+`database_url` references the RDS resource, Terraform orders the database before the
+web server automatically. `user_data_replace_on_change = true` means editing the
+script replaces the instance (new public IP) on the next apply.
 
 - The container listens on 3000 (see the app's Dockerfile `EXPOSE`); `-p 80:3000` maps it.
-- `DATABASE_URL` ingredients: username and db name are in `main.tf`; endpoint from
-  `aws rds describe-db-instances --query 'DBInstances[0].Endpoint'` (format is
-  `host:port`); password from `terraform output -raw db_password` — it exists nowhere
-  else, AWS cannot return it.
-- Debugging: `sudo docker ps -a` (is it running?), `sudo docker logs <id>` (why not?).
-  The container's entrypoint runs `db:prepare` before Rails starts, so a missing/wrong
+- `DATABASE_URL` format: `postgres://<username>:<password>@<endpoint>/<db_name>` —
+  the RDS `endpoint` attribute is already `host:port`, don't append the port again.
+- Allow ~3–5 minutes after the instance is up: the docker build is the slow part.
+
+Success check from a laptop: `curl http://<instance-public-ip>` returns an HTTP response
+(a 302 to `/login` means the app is fully up).
+
+Debugging, over an SSM session:
+
+- `/var/log/cloud-init-output.log` — everything `user_data` printed; first stop if
+  the app never comes up.
+- `sudo docker ps -a` (is it running?), `sudo docker logs <id>` (why not?). The
+  container's entrypoint runs `db:prepare` before Rails starts, so a missing/wrong
   `DATABASE_URL` kills it at boot.
 
-Success check from a laptop: `curl http://<instance-public-ip>` returns an HTTP response.
+Known tradeoff: the DB password and secret key base are baked into `user_data`, which
+anyone with EC2 read access (or a shell on the box hitting the metadata endpoint) can
+read. Fine for a 4-hour sandbox; the proper fix is fetching secrets at boot from SSM
+Parameter Store using the instance's IAM role.
 
 ## Files
 
 - `main.tf` — resource definitions
 - `outputs.tf` — outputs (`db_password`, marked sensitive; read with `terraform output -raw db_password`)
 - `versions.tf` — Terraform and provider version constraints
-- `app_container_startup.sh` — WIP `user_data` script for automating the deploy
+- `app_container_startup.sh` — `user_data` template that deploys the app at boot
+  (rendered by `templatefile()`; `${...}` in it is Terraform substitution, so any
+  shell variables added later must be escaped as `$${...}`)
 - `variables.tf`, `terraform.tfvars`, `terraform.tfvars.example` — empty/stale leftovers
   from when credentials were passed as variables; safe to delete
 
 ## Known rough edges / next steps
 
-- [ ] Automate the manual deploy with `user_data` (+ `user_data_replace_on_change`);
-      Terraform can interpolate the DB endpoint and password into the script
+- [x] Automate the manual deploy with `user_data` (+ `user_data_replace_on_change`);
+      Terraform interpolates the DB endpoint/password and secret key base into the
+      script via `templatefile()`
+- [ ] Move secrets out of `user_data`: instance fetches them at boot from SSM
+      Parameter Store / Secrets Manager using its IAM role
 - [ ] Outputs for the instance public IP and DB endpoint
 - [ ] Names and descriptions on security groups and IAM resources (currently
       auto-generated `terraform-...` names)
